@@ -12,5 +12,4 @@ api/__pycache__/
 api/**/__pycache__/
 api/.pytest_cache/
 
-cli/.platform-token.json
 dist/

@@ -1,4 +1,4 @@
-package auth
+package config
 
 import (
 	"bufio"
@@ -8,30 +8,63 @@ import (
 	"strings"
 )
 
-var configKeys = []string{
+var keys = []string{
 	"PLATFORM_API_URL",
 	"PLATFORM_TENANT_ID",
 	"PLATFORM_CLI_CLIENT_ID",
 	"PLATFORM_API_SCOPE",
 	"PLATFORM_REDIRECT_URI",
-	"PLATFORM_TOKEN_FILE",
 }
 
-// loadConfiguration applies user config, then the nearest project .env, then
-// explicit process variables. This lets an installed CLI work outside the
-// repository while still allowing a checkout-specific configuration override.
-func loadConfiguration() map[string]string {
+// FromEnv applies the user config, nearest project .env, and explicit process
+// variables in increasing precedence order.
+func FromEnv() (Config, error) {
 	values := make(map[string]string)
 	mergeEnvFile(values, userConfigFile())
 	if projectFile := findProjectEnvFile(); projectFile != "" {
 		mergeEnvFile(values, projectFile)
 	}
-	for _, key := range configKeys {
+	for _, key := range keys {
 		if value, ok := os.LookupEnv(key); ok {
 			values[key] = value
 		}
 	}
-	return values
+
+	config := Config{
+		APIURL:      values["PLATFORM_API_URL"],
+		TenantID:    values["PLATFORM_TENANT_ID"],
+		ClientID:    values["PLATFORM_CLI_CLIENT_ID"],
+		APIScope:    values["PLATFORM_API_SCOPE"],
+		RedirectURI: values["PLATFORM_REDIRECT_URI"],
+	}
+	if config.RedirectURI == "" {
+		config.RedirectURI = "http://localhost:8765/callback"
+	}
+	if config.APIURL == "" {
+		config.APIURL = "http://localhost:8000"
+	}
+	missing := make([]string, 0)
+	if config.TenantID == "" {
+		missing = append(missing, "PLATFORM_TENANT_ID")
+	}
+	if config.ClientID == "" {
+		missing = append(missing, "PLATFORM_CLI_CLIENT_ID")
+	}
+	if config.APIScope == "" {
+		missing = append(missing, "PLATFORM_API_SCOPE")
+	}
+	if len(missing) > 0 {
+		return Config{}, configError(missing)
+	}
+	return config, nil
+}
+
+type Config struct {
+	APIURL      string
+	TenantID    string
+	ClientID    string
+	APIScope    string
+	RedirectURI string
 }
 
 func userConfigFile() string {
@@ -39,7 +72,7 @@ func userConfigFile() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(configDir, "spx-platform", "config.env")
+	return filepath.Join(configDir, "spx", "config.env")
 }
 
 func findProjectEnvFile() string {
@@ -89,7 +122,7 @@ func mergeEnvFile(values map[string]string, filename string) {
 
 func isConfigKey(key string) bool {
 	key = strings.TrimSpace(key)
-	for _, allowed := range configKeys {
+	for _, allowed := range keys {
 		if key == allowed {
 			return true
 		}
@@ -105,8 +138,6 @@ func unquote(value string) string {
 	}
 	return value
 }
-
-func configValue(values map[string]string, key string) string { return values[key] }
 
 func configError(missing []string) error {
 	return fmt.Errorf("missing configuration: %s", strings.Join(missing, ", "))

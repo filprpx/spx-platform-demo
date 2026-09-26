@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -12,74 +11,23 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
+	"spx/internal/config"
 )
 
-type Config struct {
-	APIURL      string
-	TenantID    string
-	ClientID    string
-	APIScope    string
-	RedirectURI string
-	TokenFile   string
-}
-
 type Manager struct {
-	config Config
+	config config.Config
 	store  tokenStore
 }
 
-func NewManager(config Config) *Manager {
+func NewManager(config config.Config) *Manager {
 	return &Manager{config: config, store: systemTokenStore{}}
 }
 
-func newManagerWithStore(config Config, store tokenStore) *Manager {
+func newManagerWithStore(config config.Config, store tokenStore) *Manager {
 	return &Manager{config: config, store: store}
-}
-
-func ConfigFromEnv() (Config, error) {
-	values := loadConfiguration()
-	config := Config{
-		APIURL:      configValue(values, "PLATFORM_API_URL"),
-		TenantID:    configValue(values, "PLATFORM_TENANT_ID"),
-		ClientID:    configValue(values, "PLATFORM_CLI_CLIENT_ID"),
-		APIScope:    configValue(values, "PLATFORM_API_SCOPE"),
-		RedirectURI: configValue(values, "PLATFORM_REDIRECT_URI"),
-		TokenFile:   configValue(values, "PLATFORM_TOKEN_FILE"),
-	}
-	if config.RedirectURI == "" {
-		config.RedirectURI = "http://localhost:8765/callback"
-	}
-	if config.APIURL == "" {
-		config.APIURL = "http://localhost:8000"
-	}
-	if config.TokenFile == "" {
-		configDir, err := os.UserConfigDir()
-		if err != nil {
-			return Config{}, fmt.Errorf("resolve user config directory: %w", err)
-		}
-		config.TokenFile = filepath.Join(configDir, "spx-platform", "token.json")
-	}
-	missing := make([]string, 0)
-	if config.TenantID == "" {
-		missing = append(missing, "PLATFORM_TENANT_ID")
-	}
-	if config.ClientID == "" {
-		missing = append(missing, "PLATFORM_CLI_CLIENT_ID")
-	}
-	if config.APIScope == "" {
-		missing = append(missing, "PLATFORM_API_SCOPE")
-	}
-	if len(missing) > 0 {
-		return Config{}, configError(missing)
-	}
-	return config, nil
 }
 
 func (m *Manager) Login(ctx context.Context) (*oauth2.Token, error) {
@@ -164,7 +112,7 @@ func (m *Manager) Login(ctx context.Context) (*oauth2.Token, error) {
 func (m *Manager) TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 	token, err := m.readToken()
 	if err != nil {
-		return nil, errors.New("not logged in; run platform login")
+		return nil, errors.New("not logged in; run spx login")
 	}
 	endpoint := oauth2.Endpoint{TokenURL: "https://login.microsoftonline.com/" + m.config.TenantID + "/oauth2/v2.0/token"}
 	oauthConfig := oauth2.Config{ClientID: m.config.ClientID, Endpoint: endpoint}
@@ -172,14 +120,11 @@ func (m *Manager) TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
 }
 
 func (m *Manager) Logout() error {
-	var errs []error
-	if err := m.store.Delete(keyringService, m.keyringUser()); err != nil && !errors.Is(err, keyring.ErrNotFound) {
-		errs = append(errs, fmt.Errorf("remove keyring token: %w", err))
+	err := m.store.Delete(keyringService, m.keyringUser())
+	if err == nil || errors.Is(err, keyring.ErrNotFound) {
+		return nil
 	}
-	if err := os.Remove(m.config.TokenFile); err != nil && !errors.Is(err, os.ErrNotExist) {
-		errs = append(errs, fmt.Errorf("remove legacy token: %w", err))
-	}
-	return errors.Join(errs...)
+	return fmt.Errorf("remove keyring token: %w", err)
 }
 
 func (m *Manager) readToken() (*oauth2.Token, error) {
@@ -190,22 +135,7 @@ func (m *Manager) readToken() (*oauth2.Token, error) {
 	if !errors.Is(err, keyring.ErrNotFound) {
 		return nil, fmt.Errorf("read token from OS keyring: %w", err)
 	}
-
-	legacy, err := os.ReadFile(m.config.TokenFile)
-	if err != nil {
-		return nil, err
-	}
-	token, err := decodeToken(legacy)
-	if err != nil {
-		return nil, err
-	}
-	if err := m.store.Set(keyringService, m.keyringUser(), string(legacy)); err != nil {
-		return nil, fmt.Errorf("migrate token to OS keyring: %w", err)
-	}
-	if err := os.Remove(m.config.TokenFile); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("remove migrated token file: %w", err)
-	}
-	return token, nil
+	return nil, err
 }
 
 func (m *Manager) writeToken(token *oauth2.Token) error {
@@ -229,27 +159,4 @@ func decodeToken(data []byte) (*oauth2.Token, error) {
 		return nil, err
 	}
 	return &token, nil
-}
-
-func randomString(size int) (string, error) {
-	b := make([]byte, size)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(b), nil
-}
-
-func openBrowser(target string) error {
-	command := "xdg-open"
-	if runtime.GOOS == "darwin" {
-		command = "open"
-	}
-	if runtime.GOOS == "windows" {
-		command = "rundll32"
-	}
-	args := []string{target}
-	if runtime.GOOS == "windows" {
-		args = []string{"url.dll,FileProtocolHandler", target}
-	}
-	return exec.Command(command, args...).Start()
 }

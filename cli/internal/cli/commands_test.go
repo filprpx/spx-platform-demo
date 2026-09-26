@@ -1,25 +1,27 @@
-package applicationcommands
+package cli
 
 import (
 	"bytes"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/zalando/go-keyring"
+	"golang.org/x/oauth2"
+	"spx/internal/auth"
+	"spx/internal/config"
+	"spx/internal/platform"
 )
 
 func TestLogoutCommandIsRegisteredAndClearsToken(t *testing.T) {
 	keyring.MockInit()
-	tokenFile := filepath.Join(t.TempDir(), "token.json")
-	if err := os.WriteFile(tokenFile, []byte(`{"access_token":"token"}`), 0o600); err != nil {
+	if err := keyring.Set("spx", "tenant:client", "token"); err != nil {
 		t.Fatal(err)
 	}
-	setCLIConfigEnvironment(t, tokenFile)
+	setCLIConfigEnvironment(t)
 
 	var output bytes.Buffer
-	command := NewRootCommand()
+	command := newTestCommand()
 	command.SetOut(&output)
 	command.SetErr(&output)
 	command.SetArgs([]string{"logout"})
@@ -29,11 +31,11 @@ func TestLogoutCommandIsRegisteredAndClearsToken(t *testing.T) {
 	if output.String() != "Logged out.\n" {
 		t.Fatalf("unexpected output: %q", output.String())
 	}
-	if _, err := os.Stat(tokenFile); !os.IsNotExist(err) {
-		t.Fatalf("expected token to be removed, stat error: %v", err)
+	if _, err := keyring.Get("spx", "tenant:client"); err != keyring.ErrNotFound {
+		t.Fatalf("expected keyring token to be removed, error: %v", err)
 	}
 
-	command = NewRootCommand()
+	command = newTestCommand()
 	command.SetOut(&output)
 	command.SetErr(&output)
 	command.SetArgs([]string{"logout"})
@@ -44,7 +46,7 @@ func TestLogoutCommandIsRegisteredAndClearsToken(t *testing.T) {
 
 func TestHelpListsLogout(t *testing.T) {
 	var output bytes.Buffer
-	command := NewRootCommand()
+	command := newTestCommand()
 	command.SetOut(&output)
 	command.SetErr(&output)
 	command.SetArgs([]string{"--help"})
@@ -56,10 +58,19 @@ func TestHelpListsLogout(t *testing.T) {
 	}
 }
 
-func setCLIConfigEnvironment(t *testing.T, tokenFile string) {
+func setCLIConfigEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("PLATFORM_TENANT_ID", "tenant")
 	t.Setenv("PLATFORM_CLI_CLIENT_ID", "client")
 	t.Setenv("PLATFORM_API_SCOPE", "scope")
-	t.Setenv("PLATFORM_TOKEN_FILE", tokenFile)
+}
+
+func newTestCommand() *cobra.Command {
+	return NewCommand(Dependencies{
+		LoadConfig: config.FromEnv,
+		NewAuth:    auth.NewManager,
+		NewAPI: func(url string, source oauth2.TokenSource) *platform.Client {
+			return platform.NewClient(url, source)
+		},
+	})
 }

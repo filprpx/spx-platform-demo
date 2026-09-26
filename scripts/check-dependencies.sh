@@ -45,7 +45,7 @@ if command -v az >/dev/null 2>&1; then
 fi
 
 if [[ ":${PATH}:" != *":${HOME}/.local/bin:"* ]]; then
-  printf '! %-12s %s\n' 'PATH' 'warning: ~/.local/bin is not on PATH; installed platform command may need an explicit PATH update'
+  printf '! %-12s %s\n' 'PATH' 'warning: ~/.local/bin is not on PATH; installed spx command may need an explicit PATH update'
 fi
 
 if (( missing > 0 )); then

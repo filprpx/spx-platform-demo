@@ -4,7 +4,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BOOTSTRAP_DIR="${ROOT_DIR}/infra/bootstrap"
 ENV_FILE="${ENV_FILE:-${ROOT_DIR}/.env}"
-CLI_CONFIG_FILE="${CLI_CONFIG_FILE:-${XDG_CONFIG_HOME:-${HOME}/.config}/spx-platform/config.env}"
+CLI_CONFIG_FILE="${CLI_CONFIG_FILE:-${XDG_CONFIG_HOME:-${HOME}/.config}/spx/config.env}"
 
 if ! command -v terraform >/dev/null 2>&1; then
   printf 'terraform is required to generate %s\n' "$ENV_FILE" >&2

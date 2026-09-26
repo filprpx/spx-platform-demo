@@ -1,4 +1,4 @@
-package auth
+package config
 
 import (
 	"os"
@@ -10,10 +10,10 @@ func TestConfigLoadsUserConfigOutsideProject(t *testing.T) {
 	clearConfigEnvironment(t)
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
-	writeConfigFile(t, filepath.Join(configHome, "spx-platform", "config.env"), "PLATFORM_API_URL=http://user-config.test\nPLATFORM_TENANT_ID=user-tenant\nPLATFORM_CLI_CLIENT_ID=user-client\nPLATFORM_API_SCOPE=api://user/scope\nPLATFORM_REDIRECT_URI=http://localhost:8765/callback\n")
+	writeConfigFile(t, filepath.Join(configHome, "spx", "config.env"), "PLATFORM_API_URL=http://user-config.test\nPLATFORM_TENANT_ID=user-tenant\nPLATFORM_CLI_CLIENT_ID=user-client\nPLATFORM_API_SCOPE=api://user/scope\nPLATFORM_REDIRECT_URI=http://localhost:8765/callback\n")
 	changeDirectory(t, t.TempDir())
 
-	config, err := ConfigFromEnv()
+	config, err := FromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestConfigPrecedenceIsEnvironmentThenProjectThenUser(t *testing.T) {
 	clearConfigEnvironment(t)
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)
-	writeConfigFile(t, filepath.Join(configHome, "spx-platform", "config.env"), "PLATFORM_TENANT_ID=user-tenant\nPLATFORM_CLI_CLIENT_ID=user-client\nPLATFORM_API_SCOPE=user-scope\n")
+	writeConfigFile(t, filepath.Join(configHome, "spx", "config.env"), "PLATFORM_TENANT_ID=user-tenant\nPLATFORM_CLI_CLIENT_ID=user-client\nPLATFORM_API_SCOPE=user-scope\n")
 	project := t.TempDir()
 	writeConfigFile(t, filepath.Join(project, ".env"), "PLATFORM_TENANT_ID=project-tenant\nPLATFORM_CLI_CLIENT_ID=project-client\nPLATFORM_API_SCOPE=project-scope\n")
 	child := filepath.Join(project, "cli")
@@ -36,7 +36,7 @@ func TestConfigPrecedenceIsEnvironmentThenProjectThenUser(t *testing.T) {
 	changeDirectory(t, child)
 	t.Setenv("PLATFORM_CLI_CLIENT_ID", "environment-client")
 
-	config, err := ConfigFromEnv()
+	config, err := FromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,13 +50,13 @@ func TestConfigReportsMissingRequiredValues(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	changeDirectory(t, t.TempDir())
 
-	if _, err := ConfigFromEnv(); err == nil {
+	if _, err := FromEnv(); err == nil {
 		t.Fatal("expected missing configuration error")
 	}
 }
 
 func clearConfigEnvironment(t *testing.T) {
-	for _, key := range configKeys {
+	for _, key := range keys {
 		value, present := os.LookupEnv(key)
 		_ = os.Unsetenv(key)
 		t.Cleanup(func() {

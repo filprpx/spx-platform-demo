@@ -1,4 +1,4 @@
-package platformapi
+package platform
 
 import (
 	"context"

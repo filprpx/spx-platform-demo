@@ -2,7 +2,7 @@ package auth
 
 import "github.com/zalando/go-keyring"
 
-const keyringService = "spx-platform"
+const keyringService = "spx"
 
 type tokenStore interface {
 	Get(service, user string) (string, error)

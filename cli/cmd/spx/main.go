@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"spx/internal/applicationcommands"
+	"spx/internal/bootstrap"
 )
 
 func main() {
-	command := applicationcommands.NewRootCommand()
+	command := bootstrap.NewCLICommand()
 	command.SetOut(os.Stdout)
 	command.SetErr(os.Stderr)
 	if err := command.ExecuteContext(context.Background()); err != nil {

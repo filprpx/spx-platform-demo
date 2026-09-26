@@ -10,7 +10,7 @@ uninstall_block="$(sed -n '/^uninstall-cli:/,/^test:/p' "$MAKEFILE")"
 
 [[ "$teardown_block" == *'$(MAKE) bootstrap-destroy'* ]]
 [[ "$teardown_block" == *'$(CLI_INSTALL) logout'* ]]
-[[ "$teardown_block" == *'$(CLI_TOKEN_FILE)'* ]]
+[[ "$teardown_block" == *'go run ./cmd/spx logout'* ]]
 [[ "$teardown_block" == *'$(MAKE) clean-local'* ]]
 [[ "$teardown_block" == *'$(MAKE) clean-bootstrap-state'* ]]
 
@@ -22,9 +22,7 @@ state_position="$(grep -nF '$(MAKE) clean-bootstrap-state' <<<"$teardown_block" 
 (( logout_position < clean_position ))
 (( clean_position < state_position ))
 
-[[ "$clean_local_block" != *'$(CLI_TOKEN_FILE)'* ]]
 [[ "$uninstall_block" == *'$(CLI_INSTALL)'* ]]
-[[ "$uninstall_block" != *'$(CLI_TOKEN_FILE)'* ]]
 [[ "$uninstall_block" != *'$(CLI_CONFIG_FILE)'* ]]
 
 printf 'cleanup checks passed.\n'
