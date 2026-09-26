@@ -24,7 +24,7 @@ az login
 make setup
 ```
 
-`make setup` checks dependencies, initializes and interactively applies the Entra bootstrap Terraform, generates the Docker/Django `.env` and the installed CLI configuration from Terraform outputs, starts the API, builds the Go CLI, and installs it at `~/.local/bin/platform`.
+`make setup` checks dependencies, initializes and interactively applies the Entra bootstrap Terraform, generates the Docker/Django `.env` and the installed CLI configuration from Terraform outputs, starts the API, builds the Go CLI, and installs it at `~/.local/bin/spx`.
 
 Create the Django admin user:
 
@@ -35,23 +35,23 @@ make admin
 Use the installed CLI:
 
 ```bash
-platform login
-platform whoami
-platform app list
+spx login
+spx whoami
+spx app list
 ```
 
 If the API rejects a cached token, clear the local token and authenticate again:
 
 ```bash
-platform logout
-platform login
+spx logout
+spx login
 ```
 
 Logout removes only the cached authentication token. Tokens are stored in the operating system credential store through the Go keyring integration: macOS Keychain, Windows Credential Manager, or Linux Secret Service. It preserves the generated CLI configuration.
 
-On Linux, a Secret Service provider such as GNOME Keyring or another compatible desktop credential store must be running. The CLI reports an actionable error if no OS credential store is available; it does not silently fall back to plaintext token storage. Existing plaintext token files are migrated to the OS credential store on first use and then removed.
+On Linux, a Secret Service provider such as GNOME Keyring or another compatible desktop credential store must be running. The CLI reports an actionable error if no OS credential store is available; it does not fall back to plaintext token storage.
 
-If `platform` is not found, add the user-local bin directory to the current shell:
+If `spx` is not found, add the user-local bin directory to the current shell:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -68,7 +68,7 @@ make up
 make install-cli
 ```
 
-`make env` is idempotent: it regenerates Terraform-derived values, preserves the existing Django secret, writes both configuration files atomically, and sets permissions to `0600`. The root `.env` is the Docker/Django configuration source. The installed CLI configuration is written to `~/.config/spx-platform/config.env` (or the directory selected by `XDG_CONFIG_HOME`) and contains only `PLATFORM_*` values; the Django secret is never copied there. Both files are local-only and ignored by Git.
+`make env` is idempotent: it regenerates Terraform-derived values, preserves the existing Django secret, writes both configuration files atomically, and sets permissions to `0600`. The root `.env` is the Docker/Django configuration source. The installed CLI configuration is written to `~/.config/spx/config.env` (or the directory selected by `XDG_CONFIG_HOME`) and contains only `PLATFORM_*` values; the Django secret is never copied there. Both files are local-only and ignored by Git.
 
 The CLI loads configuration in this order, with later entries overriding earlier ones:
 
@@ -76,7 +76,7 @@ The CLI loads configuration in this order, with later entries overriding earlier
 2. the nearest project `.env` in the current directory or a parent directory;
 3. explicit `PLATFORM_*` process environment variables.
 
-This means the installed binary works from the repository, from `cli/`, or from another directory after `make setup`. No Makefile CLI command or manual `source .env` step is required.
+This means the installed `spx` binary works from the repository, from `cli/`, or from another directory after `make setup`. No Makefile CLI command or manual `source .env` step is required.
 
 The CLI can be rebuilt or removed with:
 

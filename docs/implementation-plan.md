@@ -60,8 +60,8 @@ Authenticate the developer through Microsoft Entra and establish the CLI-to-API 
 Example commands:
 
 ```bash
-platform login
-platform whoami
+spx login
+spx whoami
 ```
 
 The CLI uses browser-based authorization-code flow with PKCE and stores the OAuth token in the operating system credential store. Its non-secret configuration is generated from Terraform outputs and works from the repository or outside it.
@@ -85,9 +85,9 @@ Record an application request without provisioning infrastructure.
 Example commands:
 
 ```bash
-platform app create payments-api --type api --runtime go --owning-team finance-engineering
-platform app list
-platform app describe payments-api
+spx app create payments-api --type api --runtime go --owning-team finance-engineering
+spx app list
+spx app describe payments-api
 ```
 
 The Django API should:
