@@ -1,0 +1,17 @@
+services:
+  api:
+    build:
+      context: ./api
+    working_dir: /app
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DJANGO_DB_PATH: /data/db.sqlite3
+    volumes:
+      - ./api:/app
+      - api-data:/data
+
+volumes:
+  api-data:
