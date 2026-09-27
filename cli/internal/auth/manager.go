@@ -7,10 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net"
-	"net/http"
-	"net/url"
 
 	"github.com/zalando/go-keyring"
 	"golang.org/x/oauth2"
@@ -18,16 +14,17 @@ import (
 )
 
 type Manager struct {
-	config config.Config
-	store  tokenStore
+	config  config.Config
+	store   tokenStore
+	browser BrowserLauncher
 }
 
 func NewManager(config config.Config) *Manager {
-	return &Manager{config: config, store: systemTokenStore{}}
+	return &Manager{config: config, store: systemTokenStore{}, browser: NewBrowserLauncher()}
 }
 
 func newManagerWithStore(config config.Config, store tokenStore) *Manager {
-	return &Manager{config: config, store: store}
+	return &Manager{config: config, store: store, browser: NewBrowserLauncher()}
 }
 
 func (m *Manager) Login(ctx context.Context) (*oauth2.Token, error) {
@@ -45,42 +42,14 @@ func (m *Manager) Login(ctx context.Context) (*oauth2.Token, error) {
 	hash := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(hash[:])
 
-	parsed, err := url.Parse(m.config.RedirectURI)
+	callback, err := NewCallbackServer(m.config.RedirectURI, state)
 	if err != nil {
-		return nil, fmt.Errorf("parse redirect URI: %w", err)
+		return nil, err
 	}
-	server := &http.Server{}
-	codeCh := make(chan string, 1)
-	errorCh := make(chan error, 1)
-	server.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != parsed.Path {
-			http.Error(w, "invalid callback path", http.StatusBadRequest)
-			return
-		}
-		if callbackState := r.URL.Query().Get("state"); callbackState != state {
-			http.Error(w, "invalid OAuth state", http.StatusBadRequest)
-			errorCh <- errors.New("OAuth state mismatch")
-			return
-		}
-		if callbackError := r.URL.Query().Get("error"); callbackError != "" {
-			errorCh <- fmt.Errorf("Microsoft Entra login failed: %s", callbackError)
-			_, _ = io.WriteString(w, "Login failed. You can close this window.")
-			return
-		}
-		code := r.URL.Query().Get("code")
-		if code == "" {
-			errorCh <- errors.New("OAuth callback did not contain an authorization code")
-			return
-		}
-		codeCh <- code
-		_, _ = io.WriteString(w, "Login complete. You can close this window.")
-	})
-	listener, err := net.Listen("tcp", parsed.Host)
-	if err != nil {
-		return nil, fmt.Errorf("listen for OAuth callback: %w", err)
+	if err := callback.Start(); err != nil {
+		return nil, err
 	}
-	defer listener.Close()
-	go func() { _ = server.Serve(listener) }()
+	defer callback.Close(context.Background())
 
 	endpoint := oauth2.Endpoint{
 		AuthURL:  "https://login.microsoftonline.com/" + m.config.TenantID + "/oauth2/v2.0/authorize",
@@ -88,25 +57,22 @@ func (m *Manager) Login(ctx context.Context) (*oauth2.Token, error) {
 	}
 	oauthConfig := oauth2.Config{ClientID: m.config.ClientID, Endpoint: endpoint, RedirectURL: m.config.RedirectURI, Scopes: []string{m.config.APIScope, "openid", "profile", "offline_access"}}
 	authURL := oauthConfig.AuthCodeURL(state, oauth2.S256ChallengeOption(verifier), oauth2.SetAuthURLParam("code_challenge", challenge))
-	if err := openBrowser(authURL); err != nil {
+	if err := m.browser.Open(authURL); err != nil {
 		fmt.Printf("Open this URL in a browser:\n%s\n", authURL)
 	}
 
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case err := <-errorCh:
+	code, err := callback.Wait(ctx)
+	if err != nil {
 		return nil, err
-	case code := <-codeCh:
-		token, err := oauthConfig.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", verifier))
-		if err != nil {
-			return nil, fmt.Errorf("exchange authorization code: %w", err)
-		}
-		if err := m.writeToken(token); err != nil {
-			return nil, err
-		}
-		return token, nil
 	}
+	token, err := oauthConfig.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", verifier))
+	if err != nil {
+		return nil, fmt.Errorf("exchange authorization code: %w", err)
+	}
+	if err := m.writeToken(token); err != nil {
+		return nil, err
+	}
+	return token, nil
 }
 
 func (m *Manager) TokenSource(ctx context.Context) (oauth2.TokenSource, error) {
