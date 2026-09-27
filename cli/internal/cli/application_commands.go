@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 	"spx/internal/platform"
 )
@@ -37,7 +35,8 @@ func newCreateCommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Created %s\nProvisioning: %s\nRequest: %s\n", application.Name, application.ProvisioningRequest.Status, application.ProvisioningRequest.ID)
+			writeTitle(cmd.OutOrStdout(), "Application created successfully")
+			writeApplicationDetails(cmd.OutOrStdout(), application)
 			return nil
 		},
 	}
@@ -63,13 +62,7 @@ func newListCommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			for _, application := range applications {
-				status := "PENDING"
-				if application.ProvisioningRequest != nil {
-					status = application.ProvisioningRequest.Status
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "%-24s %-8s %-12s %s\n", application.Name, application.Type, application.OwningTeam, status)
-			}
+			writeApplicationList(cmd.OutOrStdout(), applications)
 			return nil
 		},
 	}
@@ -89,7 +82,7 @@ func newDescribeCommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "%s\nType: %s\nRuntime: %s\nOwning team: %s\nCreated by: %s\nProvisioning: %s\n", application.Name, application.Type, application.Runtime, application.OwningTeam, application.CreatedBy.Email, application.ProvisioningRequest.Status)
+			writeApplicationDetails(cmd.OutOrStdout(), application)
 			return nil
 		},
 	}
@@ -109,7 +102,13 @@ func newStatusCommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Request: %s\nStatus: %s\nError: %s\n", request.ID, request.Status, request.Error)
+			writeTitle(cmd.OutOrStdout(), "Provisioning request")
+			writeLabel(cmd.OutOrStdout(), "ID", request.ID)
+			writeLabel(cmd.OutOrStdout(), "Application", request.Application)
+			writeLabel(cmd.OutOrStdout(), "Status", statusStyle.Render(request.Status))
+			if request.Error != "" {
+				writeLabel(cmd.OutOrStdout(), "Error", request.Error)
+			}
 			return nil
 		},
 	}

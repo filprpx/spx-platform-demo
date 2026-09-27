@@ -16,10 +16,9 @@ func newLoginCommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if _, err := dependencies.NewAuth(config).Login(cmd.Context()); err != nil {
+			if _, err := dependencies.NewAuth(config).Login(cmd.Context(), cmd.OutOrStdout()); err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Login complete.")
 			return nil
 		},
 	}
@@ -35,10 +34,15 @@ func newLogoutCommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if err := dependencies.NewAuth(config).Logout(); err != nil {
+			removed, err := dependencies.NewAuth(config).Logout()
+			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Logged out.")
+			if removed {
+				fmt.Fprintln(cmd.OutOrStdout(), successStyle.Render("Logged out successfully."))
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "Already logged out.")
+			}
 			return nil
 		},
 	}
@@ -58,7 +62,7 @@ func newWhoAmICommand(dependencies Dependencies) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "User: %s\nDisplay name: %s\nTenant: %s\nAuthenticated: yes\n", user.Email, user.DisplayName, user.TenantID)
+			fmt.Fprintf(cmd.OutOrStdout(), "Authenticated user\nEmail: %s\nDisplay name: %s\nTenant: %s\n", user.Email, user.DisplayName, user.TenantID)
 			return nil
 		},
 	}

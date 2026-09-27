@@ -28,7 +28,7 @@ func TestLogoutCommandIsRegisteredAndClearsToken(t *testing.T) {
 	if err := command.Execute(); err != nil {
 		t.Fatal(err)
 	}
-	if output.String() != "Logged out.\n" {
+	if output.String() != "Logged out successfully.\n" {
 		t.Fatalf("unexpected output: %q", output.String())
 	}
 	if _, err := keyring.Get("spx", "tenant:client"); err != keyring.ErrNotFound {
@@ -41,6 +41,9 @@ func TestLogoutCommandIsRegisteredAndClearsToken(t *testing.T) {
 	command.SetArgs([]string{"logout"})
 	if err := command.Execute(); err != nil {
 		t.Fatalf("logout should be idempotent: %v", err)
+	}
+	if !strings.HasSuffix(output.String(), "Already logged out.\n") {
+		t.Fatalf("expected already-logged-out output, got %q", output.String())
 	}
 }
 
