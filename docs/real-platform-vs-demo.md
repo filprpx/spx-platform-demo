@@ -6,11 +6,9 @@ This document explains which parts of the SPX architecture are represented faith
 
 The intended platform has a remote execution plane. The control plane records developer intent, while a worker changes the IaC repository and opens a pull request. CI/CD then builds the application image, publishes it to ACR, applies the infrastructure, and deploys the application.
 
-The revised diagram should be stored at:
+![Real platform architecture](images/real-platform.png)
 
-```text
-docs/images/real-platform.png
-```
+This diagram shows the intended separation between the Django control plane and the remote execution plane. The worker renders Terraform, reports status back to Django, and opens a pull request; CI/CD is responsible for the downstream execution.
 
 It should show:
 
@@ -43,11 +41,9 @@ CLI
   → ACR and Container App
 ```
 
-The revised demo diagram should be stored at:
+![This demo's local architecture](images/demo-platform.png)
 
-```text
-docs/images/demo-platform.png
-```
+This diagram shows the reproducible local version: Django and Redis/Celery run in Docker, the worker runs on the developer's workstation, and Terraform is applied locally with the developer's Azure CLI credentials.
 
 It should make these boundaries visible:
 
