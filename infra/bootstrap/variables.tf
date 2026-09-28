@@ -24,3 +24,13 @@ variable "owner_object_id" {
   default     = null
   nullable    = true
 }
+
+variable "bootstrap_location" {
+  type    = string
+  default = "eastus"
+}
+
+variable "bootstrap_resource_group_name" {
+  type    = string
+  default = "spx-demo-bootstrap"
+}

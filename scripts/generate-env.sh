@@ -30,11 +30,16 @@ terraform_output() {
 }
 
 existing_secret=""
+existing_worker_token=""
 if [[ -f "$ENV_FILE" ]]; then
   existing_secret="$(sed -n 's/^DJANGO_SECRET_KEY=//p' "$ENV_FILE" | head -n 1)"
+  existing_worker_token="$(sed -n 's/^WORKER_CALLBACK_TOKEN=//p' "$ENV_FILE" | head -n 1)"
 fi
 if [[ -z "$existing_secret" || "$existing_secret" == "replace-for-local-development" ]]; then
   existing_secret="$(openssl rand -hex 32)"
+fi
+if [[ -z "$existing_worker_token" ]]; then
+  existing_worker_token="$(openssl rand -hex 32)"
 fi
 
 tenant_id="$(terraform_output tenant_id)"
@@ -42,6 +47,9 @@ api_client_id="$(terraform_output api_client_id)"
 api_scope="$(terraform_output api_scope)"
 cli_client_id="$(terraform_output cli_client_id)"
 redirect_uri="$(terraform_output redirect_uri)"
+acr_name="$(terraform_output acr_name)"
+acr_login_server="$(terraform_output acr_login_server)"
+bootstrap_resource_group_name="$(terraform_output bootstrap_resource_group_name)"
 
 write_atomic() {
   local target="$1"
@@ -67,6 +75,10 @@ PLATFORM_TENANT_ID=${tenant_id}
 PLATFORM_CLI_CLIENT_ID=${cli_client_id}
 PLATFORM_API_SCOPE=${api_scope}
 PLATFORM_REDIRECT_URI=${redirect_uri}
+PLATFORM_ACR_NAME=${acr_name}
+PLATFORM_ACR_LOGIN_SERVER=${acr_login_server}
+PLATFORM_BOOTSTRAP_RESOURCE_GROUP=${bootstrap_resource_group_name}
+WORKER_CALLBACK_TOKEN=${existing_worker_token}
 EOF
 
 write_atomic "$CLI_CONFIG_FILE" <<EOF

@@ -3,8 +3,11 @@
 .terraform/
 terraform.tfvars
 *.tfvars.json
+!infra/workloads/**/terraform.tfvars
 /.env
 build/
+.local/
+infra/workloads/**
 
 api/.venv/
 api/db.sqlite3

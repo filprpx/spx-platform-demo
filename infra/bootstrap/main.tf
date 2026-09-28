@@ -4,6 +4,35 @@ locals {
   owners = var.owner_object_id == null ? [data.azuread_client_config.current.object_id] : [var.owner_object_id]
 }
 
+resource "azurerm_resource_group" "bootstrap" {
+  name     = var.bootstrap_resource_group_name
+  location = var.bootstrap_location
+
+  tags = {
+    managed_by = "spx-demo"
+    purpose    = "bootstrap"
+  }
+}
+
+resource "random_string" "acr_suffix" {
+  length  = 8
+  special = false
+  upper   = false
+}
+
+resource "azurerm_container_registry" "bootstrap" {
+  name                = "spxdemo${random_string.acr_suffix.result}"
+  resource_group_name = azurerm_resource_group.bootstrap.name
+  location            = azurerm_resource_group.bootstrap.location
+  sku                 = "Basic"
+  admin_enabled       = false
+
+  tags = {
+    managed_by = "spx-demo"
+    purpose    = "shared-image-registry"
+  }
+}
+
 resource "azuread_application" "api" {
   display_name     = var.api_display_name
   owners           = local.owners

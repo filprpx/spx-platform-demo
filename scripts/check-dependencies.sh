@@ -18,6 +18,17 @@ require_command az 'Azure authentication and Entra bootstrap'
 require_command terraform 'Entra bootstrap infrastructure'
 require_command docker 'API container runtime'
 require_command go 'CLI build and tests'
+require_command python3 'host-side Celery worker runtime'
+require_command openssl 'local secret and worker-token generation'
+
+if command -v python3 >/dev/null 2>&1; then
+  if python3 -m venv --help >/dev/null 2>&1; then
+    printf '✓ %-12s Python virtual environments are available\n' 'python3 venv'
+  else
+    printf '✗ %-12s unavailable — install Python virtualenv support (for example, python3-venv)\n' 'python3 venv' >&2
+    missing=$((missing + 1))
+  fi
+fi
 
 if command -v docker >/dev/null 2>&1; then
   if docker compose version >/dev/null 2>&1; then

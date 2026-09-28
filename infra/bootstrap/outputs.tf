@@ -21,3 +21,15 @@ output "cli_client_id" {
 output "redirect_uri" {
   value = var.redirect_uri
 }
+
+output "acr_name" {
+  value = azurerm_container_registry.bootstrap.name
+}
+
+output "acr_login_server" {
+  value = azurerm_container_registry.bootstrap.login_server
+}
+
+output "bootstrap_resource_group_name" {
+  value = azurerm_resource_group.bootstrap.name
+}

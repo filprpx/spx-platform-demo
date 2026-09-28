@@ -9,20 +9,28 @@ clean_local_block="$(sed -n '/^clean-local:/,/^clean-bootstrap-state:/p' "$MAKEF
 uninstall_block="$(sed -n '/^uninstall-cli:/,/^test:/p' "$MAKEFILE")"
 
 [[ "$teardown_block" == *'$(MAKE) bootstrap-destroy'* ]]
+[[ "$teardown_block" == *'$(MAKE) worker-stop'* ]]
+[[ "$teardown_block" == *'$(MAKE) iac-destroy'* ]]
 [[ "$teardown_block" == *'$(CLI_INSTALL) logout'* ]]
 [[ "$teardown_block" == *'go run ./cmd/spx logout'* ]]
 [[ "$teardown_block" == *'$(MAKE) clean-local'* ]]
 [[ "$teardown_block" == *'$(MAKE) clean-bootstrap-state'* ]]
 
 destroy_position="$(grep -nF '$(MAKE) bootstrap-destroy' <<<"$teardown_block" | head -n1 | cut -d: -f1)"
+worker_stop_position="$(grep -nF '$(MAKE) worker-stop' <<<"$teardown_block" | head -n1 | cut -d: -f1)"
+iac_destroy_position="$(grep -nF '$(MAKE) iac-destroy' <<<"$teardown_block" | head -n1 | cut -d: -f1)"
 logout_position="$(grep -nF '$(CLI_INSTALL) logout' <<<"$teardown_block" | head -n1 | cut -d: -f1)"
 clean_position="$(grep -nF '$(MAKE) clean-local' <<<"$teardown_block" | head -n1 | cut -d: -f1)"
 state_position="$(grep -nF '$(MAKE) clean-bootstrap-state' <<<"$teardown_block" | head -n1 | cut -d: -f1)"
+(( worker_stop_position < destroy_position ))
+(( worker_stop_position < iac_destroy_position ))
+(( iac_destroy_position < destroy_position ))
 (( destroy_position < logout_position ))
 (( logout_position < clean_position ))
 (( clean_position < state_position ))
 
 [[ "$uninstall_block" == *'$(CLI_INSTALL)'* ]]
 [[ "$uninstall_block" != *'$(CLI_CONFIG_FILE)'* ]]
+[[ "$clean_local_block" == *'$(MAKE) worker-stop'* ]]
 
 printf 'cleanup checks passed.\n'
