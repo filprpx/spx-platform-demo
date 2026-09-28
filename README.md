@@ -1,52 +1,18 @@
 # SPX Internal Developer Platform Demo
 
-This repository demonstrates an authenticated internal developer platform control plane and a small local execution path for Azure Container Apps.
+This repository demonstrates an authenticated internal developer platform that captures infrastructure intent, provisions an Azure Container App with Terraform, and deploys a small demo API.
 
-The demo lets a developer:
-
-- declare infrastructure intent through the `spx` CLI;
-- persist that intent in Django;
-- publish an immutable provisioning job to Redis/Celery;
-- generate Terraform with a host-side worker;
-- apply the infrastructure with a local Terraform pipeline;
-- build and publish a demo API image to Azure Container Registry;
-- update an Azure Container App and verify it with `curl`;
-- remove the local and Azure resources afterward.
-
-This is intentionally a reproducible teaching demo, not a production platform. See [Real platform vs. this demo](docs/real-platform-vs-demo.md) for the differences.
+It is a reproducible teaching demo, not a production platform. See [Real platform vs. this demo](docs/real-platform-vs-demo.md) for the architectural differences.
 
 ## Time, resources, and cost expectations
 
-This demo provisions real Azure resources. It is not an instant local mock.
-
-On the first run, the Azure Container Apps Environment may take around 15 minutes to provision. Teardown can take around 25 minutes because Azure may take a long time to remove the managed Container Apps Environment. These are observed demo timings, not service-level guarantees.
-
-The bootstrap phase creates:
-
-- Microsoft Entra application registrations and service principals for the API and CLI;
-- a bootstrap resource group;
-- one shared Basic-tier Azure Container Registry.
-
-The workload phase creates:
-
-- one resource group for the application;
-- a Log Analytics workspace;
-- an Azure Container Apps Environment;
-- a user-assigned managed identity;
-- an `AcrPull` role assignment;
-- one Azure Container App.
-
-The application image is built locally, pushed to the shared ACR, and then selected by the Container App during `make deploy-app`.
-
-During one test run, the Azure charge was approximately **R$1.50**. This is an observation from that run, not a fixed price: the amount depends on subscription, region, exchange rate, resource lifetime, storage, logging, requests, and active replicas.
+The first provisioning run may take around 15 minutes, and teardown may take around 25 minutes. These are observed timings, not guarantees. The demo creates real Azure resources and may incur charges; see [Prerequisites](docs/prerequisites.md) and [Real platform vs. this demo](docs/real-platform-vs-demo.md).
 
 Run the complete cleanup when finished:
 
 ```bash
 make teardown
 ```
-
-Check Azure Cost Management for the authoritative charge on your subscription.
 
 ## Requirements
 
@@ -63,7 +29,14 @@ See [Prerequisites](docs/prerequisites.md) for installation, Azure permissions, 
 
 ## Run the demo
 
-### 1. Authenticate Azure
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/filprpx/spx-platform-demo.git
+cd spx-platform-demo
+```
+
+### 2. Authenticate Azure
 
 ```bash
 az login
@@ -75,7 +48,7 @@ Select the subscription that should receive the demo resources if your account h
 az account set --subscription "<subscription-id>"
 ```
 
-### 2. Set up the local control plane
+### 3. Set up the local control plane
 
 ```bash
 make setup
@@ -89,7 +62,7 @@ Create an administrator for Django Admin:
 make admin
 ```
 
-### 3. Authenticate the CLI
+### 4. Authenticate the CLI
 
 ```bash
 spx login
@@ -98,7 +71,7 @@ spx whoami
 
 The CLI uses browser-based Microsoft Entra authentication. Tokens are stored in the operating-system credential store.
 
-### 4. Declare infrastructure intent
+### 5. Declare infrastructure intent
 
 Run the interactive wizard:
 
@@ -125,7 +98,7 @@ spx app list
 spx app describe <application-name>
 ```
 
-### 5. Provision infrastructure
+### 6. Provision infrastructure
 
 ```bash
 make iac-pipeline
@@ -135,7 +108,7 @@ The worker has already generated Terraform under `infra/workloads/`. This comman
 
 It creates the resource group, Container Apps Environment, Log Analytics workspace, managed identity, ACR pull permission, and a dormant Container App using a public placeholder image.
 
-### 6. Build and deploy the demo API
+### 7. Build and deploy the demo API
 
 ```bash
 make deploy-app
@@ -165,7 +138,7 @@ make deploy-app
   Docker image build, ACR push, and Container App update.
 ```
 
-### 7. Clean up
+### 8. Clean up
 
 When finished, remove the workload resources, bootstrap resources, local services, credentials, and generated state:
 

@@ -25,6 +25,8 @@ The check also verifies that the Docker daemon is reachable, Docker Compose is a
 
 ## Azure access
 
+For the smoothest first run, use a new or otherwise dedicated Azure subscription/account. The demo is designed to work with a normal Azure account setup, but it creates real resources and directory registrations, so an isolated account makes cleanup and cost tracking easier.
+
 You need:
 
 - an Azure subscription;
