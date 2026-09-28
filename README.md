@@ -1,125 +1,202 @@
-# SPX Internal Developer Platform — Milestone 1
+# SPX Internal Developer Platform Demo
 
-This milestone implements the authenticated control plane only:
+This repository demonstrates an authenticated internal developer platform control plane and a small local execution path for Azure Container Apps.
 
-```text
-Go CLI → Microsoft Entra ID → Django REST API → SQLite → Django Admin
-```
+The demo lets a developer:
 
-No Azure workload, Terraform execution, Celery, Redis, PostgreSQL, or Azure DevOps integration is included yet.
+- declare infrastructure intent through the `spx` CLI;
+- persist that intent in Django;
+- publish an immutable provisioning job to Redis/Celery;
+- generate Terraform with a host-side worker;
+- apply the infrastructure with a local Terraform pipeline;
+- build and publish a demo API image to Azure Container Registry;
+- update an Azure Container App and verify it with `curl`;
+- remove the local and Azure resources afterward.
 
-## Local setup
+This is intentionally a reproducible teaching demo, not a production platform. See [Real platform vs. this demo](docs/real-platform-vs-demo.md) for the differences.
 
-Required tools:
+## Time, resources, and cost expectations
 
-- Azure CLI (`az`), already authenticated with `az login`;
-- Terraform;
-- Docker with the Compose plugin;
-- Go.
+This demo provisions real Azure resources. It is not an instant local mock.
 
-The complete setup is:
+On the first run, the Azure Container Apps Environment may take around 15 minutes to provision. Teardown can take around 25 minutes because Azure may take a long time to remove the managed Container Apps Environment. These are observed demo timings, not service-level guarantees.
 
-```bash
-az login
-make setup
-```
+The bootstrap phase creates:
 
-`make setup` checks dependencies, initializes and interactively applies the Entra bootstrap Terraform, generates the Docker/Django `.env` and the installed CLI configuration from Terraform outputs, starts the API, builds the Go CLI, and installs it at `~/.local/bin/spx`.
+- Microsoft Entra application registrations and service principals for the API and CLI;
+- a bootstrap resource group;
+- one shared Basic-tier Azure Container Registry.
 
-Create the Django admin user:
+The workload phase creates:
 
-```bash
-make admin
-```
+- one resource group for the application;
+- a Log Analytics workspace;
+- an Azure Container Apps Environment;
+- a user-assigned managed identity;
+- an `AcrPull` role assignment;
+- one Azure Container App.
 
-Use the installed CLI:
+The application image is built locally, pushed to the shared ACR, and then selected by the Container App during `make deploy-app`.
 
-```bash
-spx login
-spx whoami
-spx app list
-```
+During one test run, the Azure charge was approximately **R$1.50**. This is an observation from that run, not a fixed price: the amount depends on subscription, region, exchange rate, resource lifetime, storage, logging, requests, and active replicas.
 
-If the API rejects a cached token, clear the local token and authenticate again:
-
-```bash
-spx logout
-spx login
-```
-
-Logout removes only the cached authentication token. Tokens are stored in the operating system credential store through the Go keyring integration: macOS Keychain, Windows Credential Manager, or Linux Secret Service. It preserves the generated CLI configuration.
-
-On Linux, a Secret Service provider such as GNOME Keyring or another compatible desktop credential store must be running. The CLI reports an actionable error if no OS credential store is available; it does not fall back to plaintext token storage.
-
-If `spx` is not found, add the user-local bin directory to the current shell:
-
-```bash
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-The setup can also be run in smaller steps:
-
-```bash
-make doctor
-make bootstrap-plan
-make bootstrap-apply
-make env
-make up
-make install-cli
-```
-
-`make env` is idempotent: it regenerates Terraform-derived values, preserves the existing Django secret, writes both configuration files atomically, and sets permissions to `0600`. The root `.env` is the Docker/Django configuration source. The installed CLI configuration is written to `~/.config/spx/config.env` (or the directory selected by `XDG_CONFIG_HOME`) and contains only `PLATFORM_*` values; the Django secret is never copied there. Both files are local-only and ignored by Git.
-
-The CLI loads configuration in this order, with later entries overriding earlier ones:
-
-1. the user-level CLI configuration;
-2. the nearest project `.env` in the current directory or a parent directory;
-3. explicit `PLATFORM_*` process environment variables.
-
-This means the installed `spx` binary works from the repository, from `cli/`, or from another directory after `make setup`. No Makefile CLI command or manual `source .env` step is required.
-
-The CLI can be rebuilt or removed with:
-
-```bash
-make cli-build
-make install-cli
-make uninstall-cli
-```
-
-## Cleanup
-
-Remove only disposable local state:
-
-```bash
-make clean-local
-```
-
-This removes the local Docker Compose resources, SQLite database, generated `.env`, generated user CLI configuration, and installed CLI binary. It does not destroy the Entra app registrations or Terraform state. `make clean-local` does not log out. `make uninstall-cli` removes only the installed binary and leaves the CLI configuration and cached token untouched.
-
-To completely reset the demo:
+Run the complete cleanup when finished:
 
 ```bash
 make teardown
 ```
 
-`make teardown` first runs the interactive Terraform destroy, then logs out locally by clearing the cached token, removes local Docker resources, `.env`, SQLite, the installed CLI and generated CLI configuration, and finally removes local Terraform state. If Terraform destroy fails, the cleanup stops before logging out or deleting Terraform state.
+Check Azure Cost Management for the authoritative charge on your subscription.
 
-The Terraform provider lock file is preserved so the next setup remains reproducible.
+## Requirements
 
-Open Django Admin at `http://localhost:8000/admin/` to inspect Platform Users, Applications, and Pending Provisioning Requests.
+You need:
 
-## Verification
+- an Azure subscription and an authenticated Azure CLI;
+- Docker and Docker Compose;
+- Terraform;
+- Go;
+- Python with virtual-environment support;
+- OpenSSL.
+
+See [Prerequisites](docs/prerequisites.md) for installation, Azure permissions, ports, costs, and troubleshooting.
+
+## Run the demo
+
+### 1. Authenticate Azure
 
 ```bash
-make test
+az login
 ```
 
-Troubleshooting targets:
+Select the subscription that should receive the demo resources if your account has access to more than one:
 
 ```bash
-make logs
-make down
-make up
+az account set --subscription "<subscription-id>"
 ```
 
-Workload provisioning, Celery, Redis, Azure DevOps, and Terraform execution against Azure remain deferred from this milestone.
+### 2. Set up the local control plane
+
+```bash
+make setup
+```
+
+This verifies dependencies, interactively applies the bootstrap Terraform, creates the Entra registrations and shared Basic ACR, generates local configuration, starts Django/Redis, starts the host-side worker, and installs `spx` under `~/.local/bin/spx`.
+
+Create an administrator for Django Admin:
+
+```bash
+make admin
+```
+
+### 3. Authenticate the CLI
+
+```bash
+spx login
+spx whoami
+```
+
+The CLI uses browser-based Microsoft Entra authentication. Tokens are stored in the operating-system credential store.
+
+### 4. Declare infrastructure intent
+
+Run the interactive wizard:
+
+```bash
+spx app create
+```
+
+The wizard asks for:
+
+- application name;
+- owning team;
+- compute size;
+- container port;
+- network visibility;
+- minimum replicas;
+- maximum replicas.
+
+These choices describe how the platform should run the application. The wizard does not ask for a source repository, Git commit, Dockerfile, image, or Azure credential.
+
+The request can be inspected with:
+
+```bash
+spx app list
+spx app describe <application-name>
+```
+
+### 5. Provision infrastructure
+
+```bash
+make iac-pipeline
+```
+
+The worker has already generated Terraform under `infra/workloads/`. This command formats, initializes, validates, and plans the workload, then asks for confirmation before applying it with the developer's Azure CLI session.
+
+It creates the resource group, Container Apps Environment, Log Analytics workspace, managed identity, ACR pull permission, and a dormant Container App using a public placeholder image.
+
+### 6. Build and deploy the demo API
+
+```bash
+make deploy-app
+```
+
+This builds the checked-in application under `examples/simple-api`, pushes it to the shared ACR, and updates the Container App. It ends by printing a copyable validation command:
+
+```text
+To test the API, run:
+
+  curl https://<container-app-url>
+```
+
+The expected response is:
+
+```json
+{"application":"SPX demo API","status":"ok"}
+```
+
+The two commands have separate responsibilities:
+
+```text
+make iac-pipeline
+  Infrastructure Terraform and Azure resources.
+
+make deploy-app
+  Docker image build, ACR push, and Container App update.
+```
+
+### 7. Clean up
+
+When finished, remove the workload resources, bootstrap resources, local services, credentials, and generated state:
+
+```bash
+make teardown
+```
+
+Do not use `make clean-local` as a replacement after applying Azure infrastructure. It removes local workload state without contacting Azure. Use it only for local cleanup when no Azure resources need to be destroyed.
+
+## Useful commands
+
+```bash
+make doctor          # Check local tools, Docker, and Azure login
+make worker-status   # Check the background worker
+make worker-logs     # Follow worker output
+make logs            # Follow Django API logs
+make down            # Stop Docker Compose services
+make up              # Start Docker Compose services again
+make test            # Run project tests
+spx logout           # Clear the CLI token without removing configuration
+```
+
+## Project boundaries
+
+```text
+cli/              Go CLI
+api/              Django API and host-side Celery worker
+infra/bootstrap/  Entra and shared ACR bootstrap Terraform
+infra/workloads/  Generated per-application Terraform
+examples/         Bundled application used by make deploy-app
+docs/             Architecture decisions and implementation guidance
+```
+
+The production architecture would add a Git provider, pull requests, remote workers, remote Terraform state, and CI/CD. Those pieces are intentionally deferred. See [Real platform vs. this demo](docs/real-platform-vs-demo.md).

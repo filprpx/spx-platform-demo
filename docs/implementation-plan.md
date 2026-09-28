@@ -1,8 +1,30 @@
 # Internal Developer Platform — Sliced Implementation Plan
 
-This plan deliberately separates the control plane from the execution plane and postpones workload provisioning until the authenticated local behavior is proven.
+This plan deliberately separates the control plane from the execution plane. Milestone 1 proves the authenticated Django control plane. Milestone 2 adds local infrastructure generation and Terraform execution without requiring Azure DevOps or GitHub CI/CD configuration. The worker generates Terraform; `iac-pipeline` executes it locally.
 
 The prototype uses one monorepo with independent boundaries for the CLI, Django API, and IaC bootstrap. Those components can move into separate repositories after their contracts and workflows stabilize.
+
+For the runnable tutorial, see the [README](../README.md). Installation and Azure access details are in [Prerequisites](prerequisites.md), and the production-versus-demo boundary is explained in [Real platform vs. this demo](real-platform-vs-demo.md).
+
+## Milestone 2 — Local Container App infrastructure
+
+Milestone 2 extends the completed authenticated control plane with a real local execution path:
+
+```text
+Go CLI
+  → Django API
+  → Redis job
+  → Python worker
+  → Generated application Terraform root
+  → `make iac-pipeline`
+  → Terraform using the local Azure CLI session
+  → Azure
+  → Django status visibility
+```
+
+The milestone does not require Azure DevOps, GitHub Actions, remote Terraform state, or a pipeline service connection. The local worker and `iac-pipeline` represent the future execution pipeline while keeping the IaC repository, Terraform files, and status boundaries real.
+
+Milestone 2 is complete when a developer can create an application, observe a queued job, inspect generated Terraform, run `iac-pipeline`, deploy the bundled demo image with `deploy-app`, verify the Container App with `curl`, and see the infrastructure execution status in the CLI and Django Admin.
 
 ## Slice 0 — Define the contract and local boundaries
 
@@ -80,15 +102,18 @@ Complex authorization remains deferred; any valid authenticated user can use the
 
 ### Goal
 
-Record an application request without provisioning infrastructure.
+Record an application infrastructure request without collecting application source code.
 
 Example commands:
 
 ```bash
-spx app create payments-api --type api --runtime go --owning-team finance-engineering
+spx app create
+spx app create --name payments-api --owning-team finance-engineering --compute-size small --container-port 8080 --ingress external --min-replicas 0 --max-replicas 1
 spx app list
 spx app describe payments-api
 ```
+
+`spx app create` opens an interactive wizard grouped into application identity, compute, network, scaling, and review steps. The wizard submits the deployment configuration directly; the old `type` and `runtime` fields are not part of the CLI workflow.
 
 The Django API should:
 
@@ -117,132 +142,152 @@ Make recorded platform intent and pending provisioning requests visible to opera
 
 Register `PlatformUser`, `Application`, and `ProvisioningRequest` in Django Admin. The Admin surface observes and manages recorded intent; it is not a second provisioning mechanism.
 
-## Slice 6 — Celery orchestration with a fake PR provider
+## Slice 6 — Local asynchronous IaC execution
 
 ### Goal
 
-Introduce asynchronous execution without Azure dependencies.
+Execute the real workload Terraform locally while preserving the boundary that a future remote pipeline will use.
 
 ### Build
 
-- Celery.
-- Redis.
-- Docker Compose.
-- Background provisioning task.
-- Retry handling.
-- Provider interface for Git and pull-request operations.
+- Celery and Redis;
+- Docker Compose Redis service;
+- a Python worker running on the developer's workstation;
+- immutable job payloads containing the application and desired-state snapshot;
+- an internal Django endpoint for execution status events;
+- direct writes to the checked-out IaC repository for the single-user demo;
+- explicit application Terraform roots under the IaC repository;
+- local Terraform state stored outside the Git-managed IaC tree;
+- a background host-side worker managed by `make setup`;
+- Terraform execution through `make iac-pipeline` using the developer's existing Azure CLI session;
+- a shared Basic-tier ACR created by bootstrap Terraform;
+- Container Apps workload Terraform with scale-to-zero defaults;
+- a separate `make deploy-app` command for the bundled simple API;
+- retry, timeout, idempotency, and failure handling.
 
-Define an internal provider interface with operations equivalent to:
+The worker must not access the Django database directly. It receives all execution inputs through the queue and reports status through the internal API.
+
+The worker generates desired state and stops at `WAITING_FOR_APPROVAL`. `make iac-pipeline` discovers the pending workload without user-supplied identifiers, runs Terraform formatting, initialization, validation, and plan, then asks for confirmation before apply. This command represents the approved pull-request pipeline in the real platform.
+
+The IaC repository should be organized like:
 
 ```text
-create_branch()
-write_manifest()
-create_pull_request()
-get_pull_request_status()
-get_pipeline_status()
+infra/
+├── bootstrap/
+└── workloads/
+    └── dev/
+        └── teams/
+            └── finance-engineering/
+                └── payments-api/
+                    ├── main.tf
+                    ├── variables.tf
+                    └── versions.tf
+
+examples/
+└── simple-api/
 ```
 
-Initially implement a fake provider that:
-
-- creates a local simulated pull-request record;
-- returns a fake pull-request URL;
-- transitions through predictable states.
+The worker creates only the application-specific Terraform files. The local demo deliberately writes to the checked-out repository instead of using worktrees; worktrees and remote branches remain future concurrency and pull-request concerns.
 
 Flow:
 
 ```text
-API request
-  → Celery task
-  → fake PR provider
+CLI request
+  → Django transaction
+  → immutable job snapshot
+  → Redis
+  → background local Python worker
+  → Terraform files in the checked-out IaC repository
+  → `iac-pipeline` representing approved PR execution
+  → Terraform plan/apply using az login
+  → internal status events
   → ProvisioningRequest updated
 ```
 
-This slice validates task dispatch, retries, status transitions, polling, failure handling, and idempotency.
+The worker creates the application directory. The local demo does not create branches or commits. `iac-pipeline` represents the future approved pipeline and runs Terraform from the generated directory. After infrastructure succeeds, `make deploy-app` builds and pushes the checked-in `examples/simple-api` image and updates the Container App. Application image deployment is deliberately separate from Django provisioning. Application deletion is handled by workload Terraform during teardown.
+
+### Local execution boundary
+
+The API and Redis run in Docker Compose. The worker runs in the background on the host so it can use the host's `az` and `terraform` installations and the developer's Azure CLI login. `make teardown` stops the project worker before removing local state. The worker does not receive or mount the Django database.
 
 ### Deferred
 
-- Real Azure DevOps credentials.
-- Real repositories.
-- Real pipeline execution.
+- Azure DevOps or GitHub pull-request integration;
+- remote pipeline execution;
+- pipeline service connections and federated workload identities;
+- remote Terraform state.
 
-## Slice 7 — Real Azure DevOps pull-request integration
+## Slice 7 — Remote pull-request integration (optional)
 
 ### Goal
 
-Replace only the fake PR provider.
+Replace local Git branch handling with a real pull-request provider after local execution is reliable.
 
-Configure Azure DevOps for:
+The first supported provider may be Azure DevOps or GitHub. Configuration includes:
 
-- organization;
-- project;
-- repository;
-- branch permissions;
-- pull-request permissions;
-- development credentials;
-- pipeline repository access.
+- organization or account;
+- project or repository;
+- branch and pull-request permissions;
+- application identity or integration credentials;
+- repository-side workflow configuration.
 
-The API should use an Azure DevOps adapter. Azure DevOps calls must not be scattered through business logic.
+The API should use a provider adapter. Provider calls must not be scattered through business logic.
 
 Flow:
 
 ```text
 Django
   → Celery
-  → Azure DevOps adapter
-  → branch + manifest commit
+  → remote Git provider adapter
+  → branch + Terraform files commit
   → pull request
 ```
 
-The API remains private and polls Azure DevOps from the worker.
-
-At this point, the pull request may contain only a simple manifest file. Terraform does not need to run yet.
+The local worker's generated Terraform roots and commit contract remain unchanged.
 
 ### Deferred
 
-- Azure subscription provisioning.
-- Terraform apply.
-- Azure resource creation.
+- Remote pipeline execution.
+- Azure workload provisioning credentials.
 
-## Slice 8 — Azure DevOps pipeline with Terraform validation only
+## Slice 8 — Remote pipeline execution (optional)
 
 ### Goal
 
-Prove that a pull request can trigger infrastructure automation without provisioning Azure resources.
+Run the same workload Terraform through Azure DevOps or GitHub after a pull request is approved.
 
 ### Build
 
-- Azure DevOps pipeline YAML.
+- Pipeline YAML for the selected provider.
 - Terraform installation.
 - `terraform fmt`.
 - `terraform init`.
 - `terraform validate`.
-- Basic plan validation.
-- Pull-request status reporting.
-
-Initially use a harmless local/demo Terraform module or configuration that validates structure without creating Azure resources.
+- `terraform plan` and `terraform apply`.
+- Pull-request and pipeline status reporting.
 
 Flow:
 
 ```text
 PR created
   → pipeline triggered
-  → Terraform validated
+  → approval
+  → Terraform executed
   → pipeline result visible
-  → backend polling observes result
+  → worker observes result
 ```
 
 ### Deferred
 
-- AzureRM resource creation.
 - Production state storage.
-- Managed identity/service connection.
-- Terraform apply.
+- Managed identity or service connection hardening.
+- Production approval policy.
 
-## Slice 9 — Terraform provisions a real Azure resource
+## Slice 9 — Production-grade Terraform execution
 
 ### Goal
 
-Connect the execution plane to Azure only after the control plane and pipeline are stable.
+Harden the execution plane after local and remote execution are stable.
 
 ### Required Azure setup
 
@@ -250,7 +295,7 @@ Connect the execution plane to Azure only after the control plane and pipeline a
 - Resource group for platform infrastructure.
 - Terraform state storage.
 - State locking.
-- Azure DevOps service connection.
+- Azure DevOps or GitHub service connection.
 - Workload identity or service principal.
 - Least-privilege role assignment.
 - Deployment region.
@@ -262,6 +307,7 @@ The prototype will start with one simple resource, such as a resource group, and
 ```text
 Application
   → Azure Container App
+  → Shared Azure Container Registry
   → Managed Identity
   → Log Analytics
   → Application Insights
@@ -286,10 +332,10 @@ The production migration target is an Azure Blob backend with locking and pipeli
 4. API identity mapping
 5. Application intent capture
 6. Django Admin visibility
-7. Celery + Redis with a fake pull-request provider
-8. Real Azure DevOps pull-request integration
-9. Terraform validation pipeline
-10. Terraform Azure provisioning
+7. Celery + Redis with a local Terraform worker
+8. Remote pull-request integration, if needed
+9. Remote pipeline execution, if needed
+10. Production-grade Terraform execution
 ```
 
-Every slice should leave behind a working demo. Azure configuration is intentionally isolated to later slices rather than being a prerequisite for proving the CLI, API, state model, or orchestration design.
+Every slice should leave behind a working demo. Remote Azure DevOps and GitHub configuration is isolated to later slices; the local execution milestone uses only the developer's existing Azure CLI login and the Terraform tooling already required by the bootstrap.
