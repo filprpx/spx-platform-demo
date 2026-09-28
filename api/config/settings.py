@@ -78,3 +78,12 @@ ENTRA_ALLOWED_AUDIENCES = [
     if value.strip()
 ]
 ENTRA_REQUIRED_SCOPE = os.getenv("ENTRA_REQUIRED_SCOPE", "access_as_user")
+
+CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
+CELERY_TASK_DEFAULT_QUEUE = "provisioning"
+CELERY_TASK_SERIALIZER = "json"
+CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_RESULT_SERIALIZER = "json"
+
+PLATFORM_API_URL = os.getenv("PLATFORM_API_URL", "http://localhost:8000")
+WORKER_CALLBACK_TOKEN = os.getenv("WORKER_CALLBACK_TOKEN", "")

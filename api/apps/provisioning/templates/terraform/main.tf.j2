@@ -1,0 +1,85 @@
+provider "azurerm" {
+  features {}
+}
+
+resource "azurerm_resource_group" "application" {
+  name     = var.resource_group_name
+  location = var.location
+
+  tags = {
+    managed_by  = "spx-demo"
+    application = var.application_name
+    owning_team = var.owning_team
+  }
+}
+
+resource "azurerm_log_analytics_workspace" "application" {
+  name                = var.workspace_name
+  location            = azurerm_resource_group.application.location
+  resource_group_name = azurerm_resource_group.application.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+}
+
+resource "azurerm_container_app_environment" "application" {
+  name                       = var.environment_name
+  location                   = azurerm_resource_group.application.location
+  resource_group_name        = azurerm_resource_group.application.name
+  log_analytics_workspace_id = azurerm_log_analytics_workspace.application.id
+}
+
+resource "azurerm_user_assigned_identity" "application" {
+  name                = var.identity_name
+  location            = azurerm_resource_group.application.location
+  resource_group_name = azurerm_resource_group.application.name
+}
+
+resource "azurerm_role_assignment" "acr_pull" {
+  scope                = data.azurerm_container_registry.bootstrap.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.application.principal_id
+}
+
+data "azurerm_container_registry" "bootstrap" {
+  name                = var.acr_name
+  resource_group_name = var.bootstrap_resource_group_name
+}
+
+resource "azurerm_container_app" "application" {
+  name                         = var.container_app_name
+  container_app_environment_id = azurerm_container_app_environment.application.id
+  resource_group_name          = azurerm_resource_group.application.name
+  revision_mode                = "Single"
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.application.id]
+  }
+
+  registry {
+    server   = var.acr_login_server
+    identity = azurerm_user_assigned_identity.application.id
+  }
+
+  ingress {
+    external_enabled = var.ingress_external
+    target_port      = var.container_port
+    transport        = "auto"
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
+  }
+
+  template {
+    min_replicas = var.min_replicas
+    max_replicas = var.max_replicas
+
+    container {
+      name   = var.application_name
+      image  = "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest"
+      cpu    = var.compute_cpu
+      memory = var.compute_memory
+    }
+  }
+}
