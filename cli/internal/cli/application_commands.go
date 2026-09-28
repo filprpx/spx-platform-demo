@@ -1,7 +1,12 @@
 package cli
 
 import (
+	"errors"
+	"io"
+	"os"
+
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 	"spx/internal/platform"
 )
 
@@ -21,17 +26,47 @@ func newApplicationCommand(dependencies Dependencies) *cobra.Command {
 }
 
 func newCreateCommand(dependencies Dependencies) *cobra.Command {
-	var appType, runtime, owningTeam string
+	var (
+		interactive   bool
+		name          string
+		owningTeam    string
+		computeSize   string
+		containerPort int
+		ingress       string
+		minReplicas   int
+		maxReplicas   int
+	)
 	command := &cobra.Command{
-		Use:   "create <name>",
+		Use:   "create",
 		Short: "Register an application intent",
-		Args:  cobra.ExactArgs(1),
+		Args:  cobra.ArbitraryArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) != 0 {
+				return errors.New("application name is provided with --name; positional arguments are not supported")
+			}
+			request := platform.CreateApplicationRequest{
+				Name: name, OwningTeam: owningTeam, ComputeSize: computeSize,
+				ContainerPort: containerPort, Ingress: ingress,
+				MinReplicas: minReplicas, MaxReplicas: maxReplicas,
+			}
+			if interactive || !createFlagsChanged(cmd) {
+				if !interactiveTerminal(cmd.InOrStdin(), cmd.OutOrStdout()) {
+					return errors.New("interactive application creation requires a terminal; provide create flags or run with -i in a terminal")
+				}
+				var err error
+				request, err = runCreateWizard(cmd.Context(), cmd.InOrStdin(), cmd.OutOrStdout(), request)
+				if err != nil {
+					return err
+				}
+			}
+			if err := validateCreateRequest(request); err != nil {
+				return err
+			}
 			client, err := authenticatedClient(cmd.Context(), dependencies)
 			if err != nil {
 				return err
 			}
-			application, err := client.CreateApplication(cmd.Context(), platform.CreateApplicationRequest{Name: args[0], Type: appType, Runtime: runtime, OwningTeam: owningTeam})
+			application, err := client.CreateApplication(cmd.Context(), request)
 			if err != nil {
 				return err
 			}
@@ -40,12 +75,30 @@ func newCreateCommand(dependencies Dependencies) *cobra.Command {
 			return nil
 		},
 	}
-	command.Flags().StringVar(&appType, "type", "api", "application type: api, worker, web")
-	command.Flags().StringVar(&runtime, "runtime", "", "application runtime")
+	command.Flags().BoolVarP(&interactive, "interactive", "i", false, "run the interactive application wizard")
+	command.Flags().StringVar(&name, "name", "", "application name")
 	command.Flags().StringVar(&owningTeam, "owning-team", "", "owning team identifier")
-	_ = command.MarkFlagRequired("runtime")
-	_ = command.MarkFlagRequired("owning-team")
+	command.Flags().StringVar(&computeSize, "compute-size", "", "compute size: small or medium")
+	command.Flags().IntVar(&containerPort, "container-port", 8080, "container port")
+	command.Flags().StringVar(&ingress, "ingress", "external", "network visibility: external or internal")
+	command.Flags().IntVar(&minReplicas, "min-replicas", 0, "minimum replicas")
+	command.Flags().IntVar(&maxReplicas, "max-replicas", 1, "maximum replicas")
 	return command
+}
+
+func createFlagsChanged(command *cobra.Command) bool {
+	for _, name := range []string{"name", "owning-team", "compute-size", "container-port", "ingress", "min-replicas", "max-replicas"} {
+		if command.Flags().Changed(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func interactiveTerminal(in io.Reader, out io.Writer) bool {
+	inFile, inOK := in.(*os.File)
+	outFile, outOK := out.(*os.File)
+	return inOK && outOK && term.IsTerminal(int(inFile.Fd())) && term.IsTerminal(int(outFile.Fd()))
 }
 
 func newListCommand(dependencies Dependencies) *cobra.Command {

@@ -40,7 +40,15 @@ func writeApplicationList(out io.Writer, applications []platform.Application) {
 		if width := lipgloss.Width(status); width > statusWidth {
 			statusWidth = width
 		}
-		rows = append(rows, table.Row{application.Name, application.Type, application.Runtime, application.OwningTeam, statusStyle.Render(status)})
+		rows = append(rows, table.Row{
+			application.Name,
+			application.ComputeSize,
+			fmt.Sprintf("%d", application.ContainerPort),
+			application.OwningTeam,
+			application.Ingress,
+			fmt.Sprintf("%d-%d", application.MinReplicas, application.MaxReplicas),
+			statusStyle.Render(status),
+		})
 	}
 	statusWidth += 2 // Keep the styled status cell from being clipped at its edges.
 
@@ -49,15 +57,17 @@ func writeApplicationList(out io.Writer, applications []platform.Application) {
 	appTable := table.New(
 		table.WithColumns([]table.Column{
 			{Title: "NAME", Width: 24},
-			{Title: "TYPE", Width: 10},
-			{Title: "RUNTIME", Width: 14},
+			{Title: "SIZE", Width: 10},
+			{Title: "PORT", Width: 8},
 			{Title: "OWNING TEAM", Width: 24},
+			{Title: "INGRESS", Width: 10},
+			{Title: "REPLICAS", Width: 10},
 			{Title: "STATUS", Width: statusWidth},
 		}),
 		table.WithRows(rows),
 		table.WithStyles(styles),
 		table.WithFocused(false),
-		table.WithWidth(24+10+14+24+statusWidth+10),
+		table.WithWidth(24+10+8+24+10+10+statusWidth+14),
 		table.WithHeight(len(rows)+1),
 	)
 	fmt.Fprintln(out, appTable.View())
@@ -84,9 +94,11 @@ func writeApplicationDetails(out io.Writer, application platform.Application) {
 	requestID, requestStatus := provisioningSummary(application.ProvisioningRequest)
 	writeTitle(out, "Application: "+application.Name)
 	writeLabel(out, "ID", application.ID)
-	writeLabel(out, "Type", application.Type)
-	writeLabel(out, "Runtime", application.Runtime)
 	writeLabel(out, "Owning team", application.OwningTeam)
+	writeLabel(out, "Compute size", application.ComputeSize)
+	writeLabel(out, "Container port", fmt.Sprintf("%d", application.ContainerPort))
+	writeLabel(out, "Ingress", application.Ingress)
+	writeLabel(out, "Replicas", fmt.Sprintf("%d-%d", application.MinReplicas, application.MaxReplicas))
 	writeLabel(out, "Created by", application.CreatedBy.Email)
 	writeLabel(out, "Provisioning request", requestID)
 	writeLabel(out, "Provisioning status", requestStatus)

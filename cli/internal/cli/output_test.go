@@ -11,12 +11,12 @@ import (
 func TestWriteApplicationListIncludesHeadersAndStatus(t *testing.T) {
 	var output bytes.Buffer
 	writeApplicationList(&output, []platform.Application{{
-		Name: "payments-api", Type: "api", Runtime: "go", OwningTeam: "finance",
+		Name: "payments-api", ComputeSize: "small", ContainerPort: 8080, OwningTeam: "finance", Ingress: "external", MinReplicas: 0, MaxReplicas: 1,
 		ProvisioningRequest: &platform.ProvisioningRequest{Status: "READY"},
 	}})
 
 	result := output.String()
-	for _, expected := range []string{"NAME", "TYPE", "RUNTIME", "OWNING TEAM", "STATUS", "payments-api", "READY"} {
+	for _, expected := range []string{"NAME", "SIZE", "PORT", "OWNING TEAM", "INGRESS", "REPLICAS", "STATUS", "payments-api", "READY"} {
 		if !strings.Contains(result, expected) {
 			t.Fatalf("expected %q in output: %q", expected, result)
 		}
@@ -26,7 +26,7 @@ func TestWriteApplicationListIncludesHeadersAndStatus(t *testing.T) {
 func TestWriteApplicationListDoesNotClipLongStatus(t *testing.T) {
 	var output bytes.Buffer
 	writeApplicationList(&output, []platform.Application{{
-		Name: "payments-api", Type: "api", Runtime: "go", OwningTeam: "finance",
+		Name: "payments-api", ComputeSize: "small", ContainerPort: 8080, OwningTeam: "finance", Ingress: "external", MinReplicas: 0, MaxReplicas: 1,
 		ProvisioningRequest: &platform.ProvisioningRequest{Status: "READY_FOR_EXECUTION"},
 	}})
 
@@ -50,6 +50,9 @@ func TestWriteApplicationDetailsHandlesMissingProvisioningRequest(t *testing.T) 
 	result := output.String()
 	if !strings.Contains(result, "Provisioning request: -") || !strings.Contains(result, "Provisioning status: not started") {
 		t.Fatalf("unexpected output: %q", result)
+	}
+	if strings.Contains(result, "Type:") || strings.Contains(result, "Runtime:") {
+		t.Fatalf("legacy fields should not be displayed: %q", result)
 	}
 }
 

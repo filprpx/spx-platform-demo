@@ -3,9 +3,12 @@ package platform
 type Application struct {
 	ID                  string               `json:"id"`
 	Name                string               `json:"name"`
-	Type                string               `json:"type"`
-	Runtime             string               `json:"runtime"`
 	OwningTeam          string               `json:"owning_team"`
+	ComputeSize         string               `json:"compute_size"`
+	ContainerPort       int                  `json:"container_port"`
+	Ingress             string               `json:"ingress"`
+	MinReplicas         int                  `json:"min_replicas"`
+	MaxReplicas         int                  `json:"max_replicas"`
 	CreatedBy           PlatformUser         `json:"created_by"`
 	CreatedAt           string               `json:"created_at"`
 	ProvisioningRequest *ProvisioningRequest `json:"provisioning_request"`
@@ -29,8 +32,11 @@ type PlatformUser struct {
 }
 
 type CreateApplicationRequest struct {
-	Name       string `json:"name"`
-	Type       string `json:"type"`
-	Runtime    string `json:"runtime"`
-	OwningTeam string `json:"owning_team"`
+	Name          string `json:"name"`
+	OwningTeam    string `json:"owning_team"`
+	ComputeSize   string `json:"compute_size"`
+	ContainerPort int    `json:"container_port"`
+	Ingress       string `json:"ingress"`
+	MinReplicas   int    `json:"min_replicas"`
+	MaxReplicas   int    `json:"max_replicas"`
 }

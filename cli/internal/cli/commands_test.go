@@ -61,6 +61,36 @@ func TestHelpListsLogout(t *testing.T) {
 	}
 }
 
+func TestCreateCommandRejectsLegacyPositionalName(t *testing.T) {
+	command := newCreateCommand(Dependencies{})
+	command.SetArgs([]string{"payments-api"})
+
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "positional arguments are not supported") {
+		t.Fatalf("expected positional argument error, got %v", err)
+	}
+}
+
+func TestCreateCommandRequiresTerminalForAutomaticWizard(t *testing.T) {
+	command := newCreateCommand(Dependencies{})
+	command.SetArgs(nil)
+
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "requires a terminal") {
+		t.Fatalf("expected terminal guidance, got %v", err)
+	}
+}
+
+func TestCreateCommandDoesNotRegisterLegacyFlags(t *testing.T) {
+	command := newCreateCommand(Dependencies{})
+	command.SetArgs([]string{"--type", "api"})
+
+	err := command.Execute()
+	if err == nil || !strings.Contains(err.Error(), "unknown flag: --type") {
+		t.Fatalf("expected removed flag error, got %v", err)
+	}
+}
+
 func setCLIConfigEnvironment(t *testing.T) {
 	t.Helper()
 	t.Setenv("PLATFORM_TENANT_ID", "tenant")
